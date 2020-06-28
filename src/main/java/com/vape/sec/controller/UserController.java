@@ -27,18 +27,22 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.vape.sec.Dto.UserDto;
 import com.vape.sec.exception.AppException;
 import com.vape.sec.model.Articles;
+import com.vape.sec.model.Projet;
 import com.vape.sec.model.Role;
 import com.vape.sec.model.RoleName;
 import com.vape.sec.model.Suivie;
 import com.vape.sec.model.User;
 import com.vape.sec.repo.ArticleRep;
+import com.vape.sec.repo.ProjetRepo;
 import com.vape.sec.repo.RoleRepo;
 import com.vape.sec.repo.SuivieRep;
 import com.vape.sec.repo.UserRepo;
@@ -57,7 +61,8 @@ public class UserController {
 	ArticleRep articleRepo;
 	@Autowired
 	SuivieRep suivieRep;
-	
+	@Autowired
+	ProjetRepo projetRep ;
 	 @Autowired
 	    private PasswordEncoder passwordEncoder;
 	 
@@ -97,45 +102,48 @@ public class UserController {
 			return new ResponseEntity<User>(user, HttpStatus.OK);
 
 	}
-	 @PostMapping("/add")
-	  
-     public ResponseEntity<String> addUser(@RequestParam("imageFile") MultipartFile file,@RequestParam("nom") String nom,
-    		 
-    		 @RequestParam("prenom")String prenom ,
-    		 @RequestParam("email") String email,@RequestParam("password") String password ) 
-    		  throws IOException {
-		  User user=new User();
 
-		 if (userRepo.existsByEmail(email)) {
-				return new ResponseEntity(( "Adresse e-mail déjà utilisée!"), HttpStatus.BAD_REQUEST);
 
-		 }
-		 if(file.getOriginalFilename().equals("default")) {
-			 System.out.println("default");
-			  user.setPhoto("photos_profil/u.jpg" );
+	
+	
+    @PostMapping("/add")
 
- 			 
-		 }else {
- 	  byte [] bytes=file.getBytes();
-  //Path path=Paths.get(URI.create( folder+file.getOriginalFilename()) );
-  Path path = FileSystems.getDefault().getPath("photos_profil/"+file.getOriginalFilename());
+    public ResponseEntity<String> addUser(@RequestBody UserDto userDto) {
 
-  Files.write(path, bytes);
-  user.setPhoto("photos_profil/"+file.getOriginalFilename());
-}
-   
- 	  user.setEmail(email);
-  user.setName(nom+" "+prenom); 
-   user.setPassword(passwordEncoder.encode(password));
-    Role userRole = roleRepo.findByName(RoleName.ROLE_USER)
-			.orElseThrow(() -> new AppException("User Role not set."));
-   
-   user.setRoles(Collections.singleton(userRole));
-  userRepo.save(user);
-	return new ResponseEntity(( "User enregistré avec succès"), HttpStatus.OK);
+        User user = new User();
 
-   
-     }
+        if (userRepo.existsByEmail(userDto.email)) {
+            return new ResponseEntity(("Adresse e-mail déjà utilisée!"), HttpStatus.BAD_REQUEST);
+
+        }
+
+        user.setPhoto("photos_profil/u.jpg");
+
+
+        //user.setEp(test);
+        user.setEmail(userDto.email);
+        user.setName(userDto.name);
+        user.setPrenom(userDto.prenom);
+        user.setAdresseP(userDto.adresseP);
+        user.setCodeP(userDto.codeP);
+        user.setDelegation(userDto.delegation);
+        user.setGovernorat(userDto.governorat);
+        user.setNumtel(userDto.numtel);
+        user.setRS(userDto.rs);
+        user.setArgent(50000);
+        user.setPassword(passwordEncoder.encode(userDto.password));
+        user.setDdn(userDto.ddn);
+
+        Role userRole = roleRepo.findByName(RoleName.ROLE_USER)
+                .orElseThrow(() -> new AppException("User Role not set."));
+
+        user.setRoles(Collections.singleton(userRole));
+        userRepo.save(user);
+        return new ResponseEntity(("User enregistré avec succès"), HttpStatus.OK);
+
+
+    }
+
 	 @PostMapping("/update")
 
 	 public void modifierphoto(@RequestParam("imageFile") MultipartFile file) throws IOException {
@@ -206,6 +214,55 @@ public class UserController {
 		 
 		 
 	 }
-	
+	 
+	 @GetMapping("/argent")
 
-}
+		public ResponseEntity<Float>getArgentUser(){
+			String mail;
+			Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+			mail = ((UserPrincipal) principal).getEmail();
+			User user = userRepo.findByEmail(mail).orElseThrow(
+					() -> new UsernameNotFoundException("User not found with username or email : " + mail));	
+			
+			 
+			return new ResponseEntity<Float>(user.getArgent(), HttpStatus.OK);
+
+	 
+	 }
+	 @PostMapping("/investe")
+
+		public ResponseEntity<String>investe( @RequestParam("quantity") String quantity, @RequestParam("id") String idP){
+			String mail;
+			Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+			mail = ((UserPrincipal) principal).getEmail();
+			User user = userRepo.findByEmail(mail).orElseThrow(
+					() -> new UsernameNotFoundException("User not found with username or email : " + mail));	
+			float argentuser=user.getArgent();
+			Float quantityy=Float.parseFloat(quantity);
+			long idp2=Long.parseLong(idP);
+			Projet p=projetRep.findByIdProjet(idp2);
+			float montantmin=Float.parseFloat(p.getMontantMin());
+			if(argentuser<quantityy) {
+				return new ResponseEntity<String>("L'argent ne suffit pas", HttpStatus.BAD_REQUEST);
+
+				
+			}
+			
+			else if (quantityy<montantmin) {
+				return new ResponseEntity<String>("L'argent inférieur a montant minimum", HttpStatus.BAD_REQUEST);
+
+			}
+			else {
+				p.setMontantTotal(p.getMontantTotal()-quantityy);
+				projetRep.save(p);
+				user.setArgent(user.getArgent()-quantityy);
+				userRepo.save(user);
+				return new ResponseEntity<String>("vous avez investe", HttpStatus.OK);
+
+			}
+ 
+			 
+ 
+	 
+	 }
+ }
